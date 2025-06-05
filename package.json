@@ -1,0 +1,26 @@
+{
+  "name": "@adent/scheduler",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node test/index.js",
+    "scheduler": "node test/scheduler.js",
+    "pub": "npm version patch && git push --follow-tags && npm publish --access=public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maly/scheduler.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/maly/scheduler/issues"
+  },
+  "homepage": "https://github.com/maly/scheduler#readme",
+  "dependencies": {
+    "@adent/redis-local": "^1.0.3"
+  }
+}
