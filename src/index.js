@@ -62,6 +62,11 @@ export const finishClient = async (clientId) => {
                     waitFor:null
                 }
 
+                //job má waitFor v options, takže jeho první task bude mít waitFor `${clientId}:${jobId}:$done`
+                if (job.waitFor) {
+                    taskData.waitFor = `${clientId}:${job.waitFor}:$done`;
+                }
+
                 if (index>0) {
                     taskData.waitFor = tasksData[index-1].taskId;
                 }
@@ -110,8 +115,22 @@ export const task =  (taskId, jobId, clientId, justCallbacks, fn) => {
         registerCallback(jobId, taskId, fn);
 }
 
+const processWaitingTasks = async (waitedFor) => {        //zpracuju waiting tasks
+    let redis = redisLocal.getClient();
+    const waitingTasks = await redis.hGetAll('task:waiting');
+    for (const waitingTaskId in waitingTasks) {
+        const waitingTask = JSON.parse(waitingTasks[waitingTaskId])
+        if (waitingTask.waitFor === waitedFor) {
+            console.log("odblokuji task", waitingTask.taskId);
+            await redis.zAdd("task:queue", Date.now(), waitingTask.taskId);
+            await redis.hDel("task:waiting", waitingTask.taskId);
+            await redis.set(`task:${waitingTask.taskId}`, JSON.stringify(waitingTask));
+        }
+    }
+}
+
 const processTask = async (taskData) => {
-    let redis = await redisLocal.getClient();
+    let redis = redisLocal.getClient();
     let fn = jobs.get(taskData.jobId);
     if (fn) {
         //vyzvednu context
@@ -163,15 +182,7 @@ const processTask = async (taskData) => {
         await redis.zRem("task:processing", taskData.taskId);
 
         //zpracuju waiting tasks
-        const waitingTasks = await redis.hGetAll('task:waiting');
-        for (const waitingTaskId in waitingTasks) {
-            const waitingTask = JSON.parse(waitingTasks[waitingTaskId])
-            if (waitingTask.waitFor === taskData.taskId) {
-                await redis.zAdd("task:queue", Date.now(), waitingTask.taskId);
-                await redis.hDel("task:waiting", waitingTask.taskId);
-                await redis.set(`task:${waitingTask.taskId}`, JSON.stringify(waitingTask));
-            }
-        }
+        await processWaitingTasks(taskData.taskId);
 
         //pokud je to poslední task z jobu, tak ho dokončím
         if (taskData.jobDone) {
@@ -181,10 +192,11 @@ const processTask = async (taskData) => {
             //zruším všechny task:{clientId}:{jobId}:*
             console.log(`deleting keys ${taskData.clientId}:${taskData.jobId}:*`);
             for await (const key of redis.scanIterator({ MATCH: `task:${taskData.clientId}:${taskData.jobId}:*`, COUNT:100 })) {
-                
                 await redis.del(key);
             }
-            
+
+            //odblokuju tasky, co čekaly na doběhnutí jobu
+            await processWaitingTasks(`${taskData.clientId}:${taskData.jobId}:$done`); 
         }
     }
 }
