@@ -21,19 +21,31 @@ export const exec = (clientId, justCallbacks=false) => {
         }
         return vectorResults;
       });
-      
-      scheduler.task("generate", jobName, clientId, justCallbacks, async (ctx) => {
+
+      scheduler.task("parallel", jobName, clientId, justCallbacks, async (ctx) => {
         // Použij ctx.vector výsledky, volej LLM
         //console.log("volám generate", ctx);
-        let timelineData = {fake:"dataG"}
+        let timelineData = {fake:"dataP"}
         await promisedTimeout(3000);
         return timelineData;
-      });
+      }, {waitFor: []});
+
+      scheduler.task("generate", jobName, clientId, justCallbacks, async (ctx) => {
+        let articles = await ctx._getGlobalData("getArticles");
+        if (!articles) {
+            return null;
+        }
+        // Použij ctx.vector výsledky, volej LLM
+        //console.log("volám generate", ctx);
+        let timelineData = {fake:ctx.vector.fake+ctx.parallel.fake+"{"+Object.values(articles).join(",")+"}"}
+        await promisedTimeout(3000);
+        return timelineData;
+      }, {waitFor: ["vector","parallel"]});
       
       scheduler.task("verify", jobName, clientId, justCallbacks, async (ctx) => {
         // Ověř ctx.generate výsledky
         //console.log("volám verify", ctx);
-        let verifiedTimeline = {fake:"dataV"}
+        let verifiedTimeline = {fake:"dataVerified:"+ctx.generate.fake}
         await promisedTimeout(4000);
         return verifiedTimeline;
       });
